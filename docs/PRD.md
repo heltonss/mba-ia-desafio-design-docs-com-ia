@@ -44,7 +44,7 @@ Problema e motivação
 | -------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Notificar mudanças de status em tempo quase real               | Latência entre o commit da mudança de status e a entrega bem-sucedida         | Menor que 10 segundos                                |
 | Reduzir a dependência de polling                               | Eventos de status assinados por endpoints ativos registrados na outbox        | 100% dos eventos assinados, com tentativa de entrega ou DLQ |
-| Recuperar falhas de entrega                                    | Tentativas automáticas antes de mover o evento para a DLQ                     | 5 tentativas com backoff 1m/5m/30m/2h/12h            |
+| Recuperar falhas de entrega                                    | Tentativas automáticas antes de mover o evento para a DLQ                     | 1 tentativa inicial + 5 retentativas (6 chamadas) com backoff 1m/5m/30m/2h/12h |
 | Dar visibilidade ao cliente                                    | Histórico de entregas por endpoint                                            | Últimas 100 entregas com status, payload, resposta e tempo |
 | Proteger a entrega                                             | Requisições entregues com assinatura                                          | 100% com HMAC-SHA256 e secret por endpoint           |
 
@@ -64,7 +64,7 @@ Incluso
 - Entrega at-least-once com `X-Event-Id` para deduplicação no cliente.
 - Assinatura HMAC-SHA256 sobre o corpo da requisição.
 - Headers `X-Signature`, `X-Timestamp`, `X-Webhook-Id`, `X-Event-Id` e `Content-Type: application/json`.
-- Retry com 5 tentativas e backoff 1m/5m/30m/2h/12h.
+- Retry com 1 tentativa inicial + 5 retentativas (6 chamadas) e backoff 1m/5m/30m/2h/12h.
 - DLQ em tabela separada, com payload, motivo da falha e timestamp.
 - Replay manual de DLQ restrito a ADMIN e auditado.
 - Histórico das últimas 100 entregas por webhook.
@@ -251,17 +251,19 @@ Processar eventos pendentes da outbox em um worker separado e enviar requisiçõ
 - O worker envia POST para a URL do webhook com `Content-Type: application/json` e os headers `X-Signature`, `X-Timestamp`, `X-Webhook-Id` e `X-Event-Id`.
 - O worker aguarda no máximo 10 segundos pela resposta.
 - Resposta 2xx: marcar o evento como entregue.
-- Falha, timeout ou resposta não 2xx: registrar a falha e encaminhar o evento para a política de retry.
+- Erro de rede, timeout ou resposta 5xx: registrar a falha e encaminhar o evento para a política de retry. Resposta 4xx: registrar a falha; a política de retry para 4xx está pendente e deve ser definida no FDD.
 
 **Fluxos alternativos e exceções**
 - Timeout de 10 segundos: tratar como falha e aplicar retry.
-- Resposta não 2xx: tratar como falha e aplicar retry.
+- Resposta 5xx: tratar como falha e aplicar retry.
+- Resposta 4xx: tratar como falha; a política de retry está pendente.
 - Erro de rede: tratar como falha e aplicar retry.
 - Payload acima de 64KB: não truncar e registrar erro (hipótese: falha permanente, sem retry).
 
 **Erros previstos**
 - Timeout de 10 segundos.
-- Resposta HTTP não 2xx.
+- Resposta HTTP 5xx.
+- Resposta HTTP 4xx com política de retry pendente.
 - Erro de rede.
 - Payload acima de 64KB.
 
@@ -270,22 +272,22 @@ Processar eventos pendentes da outbox em um worker separado e enviar requisiçõ
 ---
 
 #### FR-008 Aplicar retry com backoff e mover para DLQ
-Reenviar entregas que falharam com backoff progressivo e persistir na DLQ os eventos que esgotarem as tentativas.
+Reenviar entregas com falhas retryáveis (5xx, timeout e erro de rede) com 1 tentativa inicial + 5 retentativas (6 chamadas) e backoff progressivo, persistindo na DLQ os eventos que esgotarem as tentativas. A política de retry para 4xx está pendente no FDD.
 
 **Fluxo principal**
-- Em caso de falha, registrar a tentativa e o motivo.
-- Se ainda houver tentativas disponíveis, reagendar o evento com os intervalos 1 minuto, 5 minutos, 30 minutos, 2 horas e 12 horas.
+- Em caso de falha retryável, registrar a tentativa e o motivo.
+- Se ainda houver retentativas disponíveis, reagendar o evento com os intervalos 1 minuto, 5 minutos, 30 minutos, 2 horas e 12 horas.
 - Se a entrega tiver sucesso antes do limite, marcar como entregue e não enviar para a DLQ.
-- Se as 5 tentativas falharem, mover o evento para a tabela `webhook_dead_letter` com payload, motivo da falha e timestamp.
+- Se as 5 retentativas falharem após a tentativa inicial, mover o evento para a tabela `webhook_dead_letter` com payload, motivo da falha e timestamp.
 - Remover o evento da fila ativa da outbox após a movimentação para a DLQ.
 
 **Fluxos alternativos e exceções**
 - Sucesso em uma tentativa intermediária: encerrar o ciclo de retry.
-- Cliente continua indisponível após a quinta tentativa: manter o evento na DLQ até replay manual.
+- Cliente continua indisponível após as cinco retentativas: manter o evento na DLQ até replay manual.
 - Falha ao gravar na DLQ: não perder o evento, registrar erro e manter o evento para nova tentativa (hipótese operacional).
 
 **Erros previstos**
-- Esgotamento das 5 tentativas.
+- Esgotamento das 5 retentativas.
 - Falha persistente do cliente.
 - Falha de persistência na DLQ.
 
@@ -374,7 +376,7 @@ Confiabilidade e integridade de dados
 - Garantia at-least-once. Duplicatas são possíveis e devem ser deduplicadas pelo cliente usando `X-Event-Id`.
 - Payload snapshot no momento da inserção. Se o pedido mudar depois, o evento mantém o estado da época da mudança de status.
 - Ordenação por `order_id` enquanto houver um único worker. Não há garantia de ordering global.
-- Retry com 5 tentativas e DLQ para falhas permanentes.
+- Retry com 1 tentativa inicial + 5 retentativas (6 chamadas) e DLQ para falhas permanentes.
 - Eventos entregues não são arquivados nesta fase. O arquivamento após 30 dias fica fora de escopo.
 
 Compatibilidade e portabilidade
@@ -427,7 +429,7 @@ Integrações
 - **Justificativa:** O MySQL não tem listener nativo para notificar um processo externo, e um trigger de banco não resolve esse problema. O polling de 2 segundos atende ao requisito de tempo real abaixo de 10 segundos e o worker separado continua funcionando quando a API reinicia.
 - **Trade-off:** Há latência mínima de 2 segundos e carga periódica de consulta no banco. O worker é um processo adicional para operar e monitorar.
 
-#### Decisão: Retry com 5 tentativas, backoff 1m/5m/30m/2h/12h e DLQ separada
+#### Decisão: Retry com 1 tentativa inicial + 5 retentativas, backoff 1m/5m/30m/2h/12h e DLQ separada
 - **Justificativa:** A janela de aproximadamente 15 horas cobre indisponibilidades planejadas e evita que eventos fiquem pendurados para sempre. A DLQ separada mantém a outbox principal limpa e preserva payload, motivo e timestamp para diagnóstico e replay.
 - **Trade-off:** Um cliente que fique fora por mais de aproximadamente 15 horas depende de replay manual. A operação passa a ter mais uma tabela e um fluxo administrativo para monitorar.
 
@@ -479,7 +481,7 @@ Probabilidades e impactos são estimativas iniciais (hipótese), pois não foram
 - **Probabilidade:** Alta
 - **Impacto:** Eventos ficam pendentes, a entrega atrasa e, após as tentativas, o cliente perde a notificação até um replay manual.
 - **Mitigação:**
-  - Aplicar retry com backoff de 1m/5m/30m/2h/12h.
+  - Aplicar 1 tentativa inicial + 5 retentativas com backoff de 1m/5m/30m/2h/12h.
   - Usar timeout HTTP de 10 segundos para não travar o worker.
   - Persistir falhas permanentes na DLQ para replay posterior.
 - **Plano de contingência:** O time de operação identifica os eventos na DLQ e um ADMIN executa o replay depois que o cliente normalizar o endpoint.
@@ -548,8 +550,8 @@ Checklist objetivo que define se a feature está pronta.
 - A entrega usa POST JSON com `X-Signature`, `X-Timestamp`, `X-Webhook-Id`, `X-Event-Id` e `Content-Type: application/json`.
 - A assinatura HMAC-SHA256 é calculada sobre o corpo e pode ser validada pelo cliente.
 - O timeout de cada chamada HTTP é de 10 segundos.
-- Falhas aplicam as 5 tentativas com os intervalos 1m/5m/30m/2h/12h.
-- Após as 5 tentativas sem sucesso, o evento é persistido na `webhook_dead_letter` com payload, motivo e timestamp.
+- Falhas retryáveis (5xx, timeout e erro de rede) aplicam 1 tentativa inicial + 5 retentativas (6 chamadas) com os intervalos 1m/5m/30m/2h/12h. A política de retry para 4xx está pendente.
+- Após as 5 retentativas sem sucesso de uma falha retryável, o evento é persistido na `webhook_dead_letter` com payload, motivo e timestamp.
 - Payloads acima de 64KB são rejeitados sem truncamento.
 - O endpoint de replay de DLQ exige role ADMIN e registra em log quem executou o replay.
 - O histórico retorna as últimas 100 entregas de um webhook com status, payload, resposta e tempo de resposta.
