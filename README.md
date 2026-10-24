@@ -15,6 +15,7 @@ O entregável é puramente documental: um `PRD` (por quê/o quê), um `RFC` (arq
 - **opencode (CLI/agente)** — ferramenta principal de orquestração. Usei-a para ler a transcrição e o código-fonte, estruturar os documentos, escrevê-los e editá-los iterativamente. Foi o "maestro": eu definia o que precisava ser feito, e ela executava leitura, busca e escrita dentro do repositório.
 - **Modelo de linguagem (deepseek-v4-pro, via opencode)** — motor de geração de conteúdo. Responsável por interpretar a transcrição, mapear pontos de integração no código e redigir o texto dos cinco documentos, sempre sob revisão crítica minha.
 - **Ferramentas de busca/leitura do agente (glob, grep, read)** — usadas para localizar os pontos reais de integração no código (ex.: a transação de `changeStatus`, as classes de erro, o middleware de auth) antes de citá-los nos documentos.
+- **git** — usado para revisar o histórico do repositório (incluindo o enunciado original do desafio, recuperado do commit inicial) e versionar cada ciclo de ajuste.
 
 Não foram usados plugins, skills externos ou geração via web; todo o trabalho partiu da transcrição e do código local.
 
@@ -28,9 +29,10 @@ A ordem de produção seguiu a sugestão do enunciado, com os **ADRs primeiro**,
 4. **FDD** — com as decisões formalizadas, detalhei fluxos, contratos, matriz de erros `WEBHOOK_*`, observabilidade e a seção "Integração com o sistema existente".
 5. **PRD** — por último, como consolidação de mais alto nível (problema, escopo, requisitos, métricas, riscos).
 6. **Tracker** — varri os documentos prontos e montei a referência cruzada, removendo os itens sem origem identificável.
-7. **README** — este relato, ao final, quando o processo já estava completo.
+7. **Validação final** — rodei uma checagem minuciosa contra os critérios de aceite do desafio (seções obrigatórias, contagens mínimas, percentuais do tracker, caminhos de código citados) e corrigi as pendências encontradas antes de fechar.
+8. **README** — este relato, ao final, quando o processo já estava completo.
 
-A interação com a IA foi sempre dirigida: cada documento nasceu de um prompt específico (não de um pedido genérico "gere o PRD"), e cada saída passou por revisão crítica antes de ser aceita.
+A interação com a IA foi sempre dirigida: cada documento nasceu de um prompt específico (não de um pedido genérico "gere o PRD"), e cada saída passou por revisão crítica antes de ser aceita. A validação final foi feita com o mesmo rigor: a IA leu cada arquivo entregue, confrontou com a transcrição e com o código, e reportou divergências que eu então corrigi.
 
 ## Prompts customizados
 
@@ -80,16 +82,31 @@ linha, NÃO crie a linha — isso indica conteúdo inventado. Marque como
 CODIGO apenas caminhos de arquivos que existem de fato no repositório.
 ```
 
+**4. Validação contra os critérios de aceite (usado no ciclo final):**
+
+```text
+Faça uma busca minuciosa na entrega e valide contra os Critérios de
+Aceite do desafio, item a item. Para cada critério, responda PASSA ou
+FALHA com evidência (arquivo, seção, contagem, linha). Verifique também:
+1. Todo caminho de código citado nos documentos existe no repositório,
+   na linha indicada.
+2. Nenhuma decisão registrada contradiz TRANSCRICAO.md ou o código.
+3. Os percentuais do TRACKER.md (cobertura, Fonte=TRANSCRICAO,
+   Fonte=CODIGO) e os mínimos numéricos dos documentos.
+Liste observações menores que não bloqueiam, para que eu decida corrigir.
+```
+
 ## Iterações e ajustes
 
-A produção levou cerca de **4 ciclos principais** de geração → revisão → correção. Os momentos em que a IA errou ou ficou superficial, e que exigiram correção:
+A produção levou cerca de **4 ciclos principais** de geração → revisão → correção, mais **1 ciclo de validação final** contra os critérios de aceite. Os momentos em que a IA errou ou ficou superficial, e que exigiram correção:
 
 1. **Documentos genéricos e com duplicação.** As primeiras versões repetiam a mesma decisão nas quatro alturas (PRD/RFC/FDD/ADRs) e soavam como cópia da transcrição. Ajustei os prompts para reforçar a fronteira entre os documentos (RFC = decisão, FDD = implementação) e pedir remoção de trechos vagos.
 2. **Confusão entre "5 tentativas" e a contagem de chamadas.** A transcrição diz "5 tentativas" mas lista 5 intervalos de backoff (1m/5m/30m/2h/12h), que só fecham ~15h se contarmos 1 tentativa inicial + 5 retentativas (6 chamadas). A IA registrou a leitura correta, mas precisei garantir que a divergência ficasse documentada explicitamente (está no fluxo 4 e no critério 13 do FDD) em vez de escondida.
 3. **`customerId` vindo do JWT.** A sugestão inicial da reunião foi corrigida na própria call: o `customerId` deve ser explícito no body/path, porque o JWT representa o usuário operador, não o cliente. A IA inicialmente propagou a versão errada; corrigi para refletir a decisão final ([09:32] Larissa).
-4. **Hipóteses vendidas como fatos.** Valores como p95 < 150ms, disponibilidade 99,9%, tamanho do lote do worker e formato exato do `X-Signature` não foram decididos na reunião. A IA os apresentou como requisitos; corrigi para marcá-los como "hipótese a validar" em todo o pacote, mantendo apenas o que é rastreável como decisão.
+4. **Hipóteses vendidas como fatos.** Valores como percentis de latência, disponibilidade 99,9%, tamanho do lote do worker e formato exato do `X-Signature` não foram decididos na reunião. A IA os apresentou como requisitos; corrigi para marcá-los como "hipótese a validar" em todo o pacote, mantendo apenas o que é rastreável como decisão.
+5. **Ciclo de validação final.** Na checagem contra os critérios de aceite, a IA apontou 4 pendências menores, que corrigi antes de fechar: o PRD não tinha subseção explícita de "Cenários de uso" (adicionada com 4 cenários rastreáveis); o RFC listava 4 revisores em vez dos 5 participantes da reunião; `docs/HLD.md` era um arquivo extra fora da estrutura obrigatória (removido, e o cabeçalho do FDD ajustado); e a menção a `src/worker.ts` no RFC não marcava o arquivo como novo (marcada).
 
-O `TRACKER.md` foi o instrumento que tornou essas correções visíveis: toda linha sem `Localização` válida era sinal de invenção e foi ajustada ou removida.
+O `TRACKER.md` foi o instrumento que tornou essas correções visíveis: toda linha sem `Localização` válida era sinal de invenção e foi ajustada ou removida. No estado final, o tracker tem 134 linhas — 113 com fonte na transcrição (84,3%) e 21 com fonte no código real — e todos os caminhos de arquivo citados nos documentos existem no repositório, nas linhas indicadas.
 
 ## Como navegar a entrega
 
@@ -115,7 +132,7 @@ Arquivos entregues (apenas `docs/` e este `README.md` foram alterados; `src/`, `
 
 Ordem sugerida de leitura:
 
-1. `docs/PRD.md` — entender o problema e o escopo.
+1. `docs/PRD.md` — entender o problema, os cenários de uso e o escopo.
 2. `docs/adrs/*` — as decisões fechadas, uma a uma.
 3. `docs/RFC.md` — a proposta consolidada e o que ficou em aberto.
 4. `docs/FDD.md` — o detalhe de implementação e a integração com o código.
