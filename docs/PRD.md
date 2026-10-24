@@ -24,6 +24,12 @@ A entrega é **at-least-once** (deduplicação no cliente via `X-Event-Id`), com
 - Usuários autenticados do OMS, incluindo os que representam os clientes B2B.
 - Times de operação e administração, que acompanham falhas e executam replay de DLQ.
 
+**Cenários de uso**
+- Um cliente B2B cadastra o endpoint de webhook pela API, recebe a secret gerada e passa a receber notificações apenas dos status que assina ([09:31] Marcos, [09:33] Marcos).
+- O status de um pedido muda e, na mesma transação, o evento entra na outbox; o worker entrega a notificação em menos de 10 segundos ([09:40] Bruno, [09:09] Diego, [09:02] Marcos).
+- O endpoint do cliente fica fora do ar: as entregas seguem o retry `1m/5m/30m/2h/12h` e, esgotado, o evento vai para a DLQ até um ADMIN fazer o replay ([09:17] Diego, [09:18] Diego, [09:36] Sofia).
+- Um usuário acompanha a saúde do webhook consultando as últimas 100 entregas e, ao trocar a secret, conta com 24 horas de convivência para migrar seus sistemas ([09:34] Marcos, [09:21] Sofia).
+
 **Problema**
 - Os clientes consultam `GET /orders` periodicamente para detectar mudanças de status: integração lenta e cara, sem garantia de que toda mudança é observada.
 - Não existe mecanismo de eventos, fila, webhook ou histórico de entregas no OMS atual — essa lacuna é a feature.

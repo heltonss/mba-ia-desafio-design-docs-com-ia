@@ -139,5 +139,6 @@ Referência cruzada entre o pacote de design docs (`PRD`, `RFC`, `FDD`, `ADRs`) 
 | ADR-006-REF | docs/adrs/ADR-006-reuso-dos-padroes-existentes-do-projeto.md | Referência de código | Padrões de erro, auth, logger e rotas citados no ADR | CODIGO | src/shared/errors/app-error.ts |
 | PRD-CONTEXTO-01 | docs/PRD.md | Contexto | Três clientes B2B: Atlas Comercial, MaxDistribuição e Nova Cargo | TRANSCRICAO | [09:00] Marcos |
 | PRD-CONTEXTO-02 | docs/PRD.md | Contexto | Transação atual é pesada: atualiza orders, insere history e decrementa estoque | TRANSCRICAO | [09:04] Bruno |
+| PRD-CONTEXTO-03 | docs/PRD.md | Cenário de uso | Cliente cadastra webhook, recebe a secret e passa a receber notificações dos status que assina | TRANSCRICAO | [09:31] Marcos |
 | RFC-PROPOSTA-01 | docs/RFC.md | Proposta | Worker como entrypoint `src/worker.ts` e script `npm run worker` | TRANSCRICAO | [09:11] Larissa |
 | RFC-PROPOSTA-02 | docs/RFC.md | Proposta | Entrega estimada em três sprints com revisão de segurança | TRANSCRICAO | [09:47] Larissa |

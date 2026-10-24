@@ -18,7 +18,7 @@ A alternativa de disparar a chamada HTTP dentro de `OrderService.changeStatus` f
 
 A solução adotada é o padrão outbox no MySQL. A linha de evento é inserida na mesma transação SQL que confirma a mudança de status. Um worker separado lê a outbox e executa as chamadas HTTP. Se a transação principal confirmar, o evento existe. Se ela reverter, o evento desaparece junto. [09:06] Diego, [09:40] Bruno, [09:41] Diego.
 
-**Encaixe no HLD**
+**Encaixe na aplicação existente**
 
 O OMS é uma aplicação Node.js, TypeScript, Express, Prisma e MySQL. A feature não cria um novo sistema: adiciona um módulo em `src/modules/webhooks`, tabelas no MySQL existente, uma entrypoint `src/worker.ts` e o script `npm run worker`, que ainda não existem. O worker usa o mesmo banco e a mesma stack, mas roda em processo separado da API. [09:11] Larissa, [09:11] Bruno, [09:11] Diego, [09:28] Bruno.
 

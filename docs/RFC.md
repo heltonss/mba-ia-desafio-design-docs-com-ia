@@ -8,7 +8,7 @@
 | Autor | Larissa (Tech Lead) |
 | Status | Em revisão |
 | Data | 24/10/2026 |
-| Revisores | Marcos (Product Manager), Bruno (Engenheiro Pleno, time de Pedidos), Diego (Engenheiro Sênior, time de Plataforma), Sofia (Engenheira de Segurança) |
+| Revisores | Larissa (Tech Lead, autora), Marcos (Product Manager), Bruno (Engenheiro Pleno, time de Pedidos), Diego (Engenheiro Sênior, time de Plataforma), Sofia (Engenheira de Segurança) — os cinco participantes da reunião |
 | Escopo do documento | Proposta de arquitetura (o quê propomos e por quê). O detalhamento de implementação fica no FDD. |
 
 ---
@@ -37,7 +37,7 @@ A solução adiciona quatro peças ao OMS existente, sem criar um novo sistema:
 
 1. **Outbox transacional no MySQL.** Dentro da transação de `changeStatus`, além de atualizar o pedido e o histórico, gravamos uma linha de evento na tabela `webhook_outbox`. Se a transação confirmar, o evento existe; se reverter, o evento desaparece junto. Não há divergência possível entre status mudado e evento registrado. O payload é um **snapshot renderizado na inserção** e o evento é filtrado pelos status que cada endpoint assina — se nenhum webhook do customer assina o novo status, nada é inserido.
 
-2. **Worker em processo separado.** Um processo Node independente (`src/worker.ts`, script `npm run worker`) faz **polling da outbox a cada 2 segundos**, lê os eventos pendentes mais antigos em lote pequeno e dispara as chamadas HTTP. Rodar separado da API garante que o reinício da API não derruba o worker. Por enquanto é **single-worker**, o que dá ordenação implícita por `order_id` (não há garantia de ordenação global).
+2. **Worker em processo separado.** Um processo Node independente e **novo** (`src/worker.ts` e script `npm run worker`, ambos ainda inexistentes no código) faz **polling da outbox a cada 2 segundos**, lê os eventos pendentes mais antigos em lote pequeno e dispara as chamadas HTTP. Rodar separado da API garante que o reinício da API não derruba o worker. Por enquanto é **single-worker**, o que dá ordenação implícita por `order_id` (não há garantia de ordenação global).
 
 3. **Entrega com retry e DLQ.** Cada entrega tem timeout HTTP de 10 segundos. Em caso de falha retryável (5xx, timeout, erro de rede), aplicamos **1 tentativa inicial + 5 retentativas** com backoff `1m/5m/30m/2h/12h` (~15h de janela). Esgotadas as tentativas, o evento vai para `webhook_dead_letter` (tabela separada com payload, motivo e timestamp), com **replay manual** via endpoint ADMIN auditado.
 
