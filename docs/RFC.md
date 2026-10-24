@@ -51,25 +51,27 @@ O detalhamento de como construir (contratos HTTP, matriz de erros `WEBHOOK_*`, f
 
 | Alternativa | Trade-off que levou ao descarte |
 | --- | --- |
-| **Envio síncrono dentro de `changeStatus`** | Acopla latência e disponibilidade do cliente à operação de mudança de status; um cliente lento travaria mudanças de outros pedidos e, se o cliente estivesse fora do ar, não haveria como reverter a mudança de status apenas por causa da notificação. |
-| **Redis Streams / fila externa (Redis Cluster)** | Exige subir e operar nova infraestrutura de mensageria. Para um time pequeno, é overengineering quando o MySQL existente resolve com outbox. |
-| **Trigger do banco como notificador** | MySQL não tem listener nativo tipo `NOTIFY/LISTEN` do Postgres; um trigger só executa SQL e não notifica processo externo. Seria necessário improvisar (arquivo/endpoint) e fica frágil. O polling de 2s atende o requisito de 10s. |
-| **Retry com 3 tentativas** | Insuficiente para cobrir indisponibilidades reais (já houve manutenção planejada de 2h em cliente). |
-| **Retry infinito com backoff** | Evento de cliente que "sumiu" fica pendurado para sempre. |
-| **Entrega exactly-once** | Exigiria coordenação dos dois lados (OMS + cliente) e aumenta muito a complexidade. At-least-once com `X-Event-Id` é o padrão de mercado e resolve a grande maioria dos casos. |
+| **Envio síncrono dentro de `changeStatus`** | Acopla latência e disponibilidade do cliente à operação de mudança de status; um cliente lento travaria mudanças de outros pedidos e, se o cliente estivesse fora do ar, não haveria como reverter a mudança de status apenas por causa da notificação. → [ADR-001](adrs/ADR-001-outbox-transacional-no-mysql.md) |
+| **Redis Streams / fila externa (Redis Cluster)** | Exige subir e operar nova infraestrutura de mensageria. Para um time pequeno, é overengineering quando o MySQL existente resolve com outbox. → [ADR-001](adrs/ADR-001-outbox-transacional-no-mysql.md) |
+| **Trigger do banco como notificador** | MySQL não tem listener nativo tipo `NOTIFY/LISTEN` do Postgres; um trigger só executa SQL e não notifica processo externo. Seria necessário improvisar (arquivo/endpoint) e fica frágil. O polling de 2s atende o requisito de 10s. → [ADR-001](adrs/ADR-001-outbox-transacional-no-mysql.md), [ADR-002](adrs/ADR-002-worker-em-processo-separado-com-polling.md) |
+| **Retry com 3 tentativas** | Insuficiente para cobrir indisponibilidades reais (já houve manutenção planejada de 2h em cliente). → [ADR-003](adrs/ADR-003-retry-com-backoff-e-dlq.md) |
+| **Retry infinito com backoff** | Evento de cliente que "sumiu" fica pendurado para sempre. → [ADR-003](adrs/ADR-003-retry-com-backoff-e-dlq.md) |
+| **Entrega exactly-once** | Exigiria coordenação dos dois lados (OMS + cliente) e aumenta muito a complexidade. At-least-once com `X-Event-Id` é o padrão de mercado e resolve a grande maioria dos casos. → [ADR-005](adrs/ADR-005-entrega-at-least-once-com-x-event-id.md) |
 
 ---
 
 ## Questões em aberto
 
-Pontos levantados na reunião e não decididos (ou explicitamente adiados), que precisam ser fechados antes/durante a implementação:
+Pontos levantados na reunião e não decididos (ou explicitamente adiados), além de lacunas identificadas na análise da proposta — todos precisam ser fechados antes/durante a implementação:
 
 1. **Rate limiting de saída.** Um cliente com muitos pedidos em pouco tempo pode receber uma rajada de chamadas. Ficou definido **observar e decidir depois**; não entra nesta fase.
 2. **Fallback por email para webhook com falha.** Adiado para uma próxima fase, após medir o impacto.
-3. **Formato de convivência das duas secrets durante a rotação (24h).** Como o `X-Signature` comporta a secret anterior e a nova em paralelo ainda não foi definido.
-4. **Política de retry para resposta 4xx do cliente.** A reunião detalhou 5xx/timeout/erro de rede, mas não fechou o comportamento para 4xx.
-5. **Recuperação de eventos presos em `PROCESSANDO`** se o worker cair no meio de uma entrega (mecanismo de lease/requeue não definido).
-6. **Ordenação por `order_id` vs. retry.** Um retry atrasado pode deixar um evento posterior ultrapassar o anterior; a contradição não foi resolvida.
+3. **Formato de convivência das duas secrets durante a rotação (24h).** Como o `X-Signature` comporta a secret anterior e a nova em paralelo ainda não foi definido. → [ADR-004](adrs/ADR-004-hmac-sha256-com-secret-por-endpoint.md)
+4. **Política de retry para resposta 4xx do cliente.** A reunião detalhou 5xx/timeout/erro de rede, mas não fechou o comportamento para 4xx. → [ADR-003](adrs/ADR-003-retry-com-backoff-e-dlq.md)
+5. **Recuperação de eventos presos em `PROCESSANDO`** se o worker cair no meio de uma entrega (mecanismo de lease/requeue não definido). → [ADR-002](adrs/ADR-002-worker-em-processo-separado-com-polling.md)
+6. **Ordenação por `order_id` vs. retry.** Um retry atrasado pode deixar um evento posterior ultrapassar o anterior; a contradição não foi resolvida. → [ADR-002](adrs/ADR-002-worker-em-processo-separado-com-polling.md), [ADR-003](adrs/ADR-003-retry-com-backoff-e-dlq.md)
+7. **Arquivamento de linhas entregues da outbox.** A reunião citou arquivar depois de ~30 dias, mas deixou explicitamente fora do escopo desta feature. → [ADR-001](adrs/ADR-001-outbox-transacional-no-mysql.md)
+8. **Escala para múltiplos workers.** Particionamento por `order_id` ou lock pessimista foi mencionado como "problema do futuro"; nesta fase o worker é único e a decisão não está tomada. → [ADR-002](adrs/ADR-002-worker-em-processo-separado-com-polling.md)
 
 ---
 

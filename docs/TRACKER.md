@@ -79,6 +79,8 @@ Referência cruzada entre o pacote de design docs (`PRD`, `RFC`, `FDD`, `ADRs`) 
 | RFC-OQ-03 | docs/RFC.md | Questão em aberto | Formato de convivência das duas secrets durante a rotação (24h) | TRANSCRICAO | [09:22] Sofia |
 | RFC-OQ-04 | docs/RFC.md | Questão em aberto | Política de retry para resposta 4xx do cliente | TRANSCRICAO | [09:42] Diego |
 | RFC-OQ-05 | docs/RFC.md | Questão em aberto | Ordenação por `order_id` vs. retry atrasado | TRANSCRICAO | [09:12] Diego |
+| RFC-OQ-06 | docs/RFC.md | Questão em aberto | Arquivamento de linhas entregues da outbox (~30 dias, adiado) | TRANSCRICAO | [09:08] Diego |
+| RFC-OQ-07 | docs/RFC.md | Questão em aberto | Escala para múltiplos workers (particionamento/lock) deixada para o futuro | TRANSCRICAO | [09:13] Diego |
 | RFC-RISK-01 | docs/RFC.md | Risco | Worker único é ponto único de processamento | TRANSCRICAO | [09:11] Diego |
 | RFC-RISK-02 | docs/RFC.md | Risco | Inserção na outbox acoplada ao `changeStatus` pode bloquear a operação | TRANSCRICAO | [09:41] Diego |
 | RFC-RISK-03 | docs/RFC.md | Risco | Cliente indisponível por mais de ~15h depende de replay manual | TRANSCRICAO | [09:17] Marcos |
