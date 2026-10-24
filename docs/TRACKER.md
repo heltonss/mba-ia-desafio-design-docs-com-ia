@@ -32,6 +32,8 @@ Referência cruzada entre o pacote de design docs (`PRD`, `RFC`, `FDD`, `ADRs`) 
 | PRD-MET-01 | docs/PRD.md | Métrica | Meta: latência entre commit e entrega menor que 10 segundos | TRANSCRICAO | [09:02] Marcos |
 | PRD-MET-02 | docs/PRD.md | Métrica | 1 tentativa inicial + 5 retentativas (6 chamadas) com backoff 1m/5m/30m/2h/12h | TRANSCRICAO | [09:17] Diego |
 | PRD-MET-03 | docs/PRD.md | Métrica | Histórico com as últimas 100 entregas (status, payload, resposta, tempo) | TRANSCRICAO | [09:34] Marcos |
+| PRD-MET-04 | docs/PRD.md | Métrica | 100% dos eventos assinados têm tentativa de entrega ou vão para a DLQ | TRANSCRICAO | [09:06] Diego |
+| PRD-MET-05 | docs/PRD.md | Métrica | 100% das entregas assinadas com HMAC-SHA256 e secret única por endpoint | TRANSCRICAO | [09:22] Sofia |
 | PRD-ESC-IN-01 | docs/PRD.md | Escopo (incluso) | CRUD autenticado de configuração de webhook por customer | TRANSCRICAO | [09:31] Marcos |
 | PRD-ESC-IN-02 | docs/PRD.md | Escopo (incluso) | Outbox no MySQL, worker separado em polling de 2s, retry e DLQ | TRANSCRICAO | [09:06] Diego |
 | PRD-ESC-IN-03 | docs/PRD.md | Escopo (incluso) | Reuso dos padrões existentes (AppError, Pino, Zod, `requireRole`, módulos) | TRANSCRICAO | [09:30] Larissa |
@@ -77,13 +79,15 @@ Referência cruzada entre o pacote de design docs (`PRD`, `RFC`, `FDD`, `ADRs`) 
 | RFC-OQ-01 | docs/RFC.md | Questão em aberto | Rate limiting de saída: observar e decidir depois | TRANSCRICAO | [09:39] Larissa |
 | RFC-OQ-02 | docs/RFC.md | Questão em aberto | Fallback por email para webhook com falha (adiado) | TRANSCRICAO | [09:37] Larissa |
 | RFC-OQ-03 | docs/RFC.md | Questão em aberto | Formato de convivência das duas secrets durante a rotação (24h) | TRANSCRICAO | [09:22] Sofia |
-| RFC-OQ-04 | docs/RFC.md | Questão em aberto | Política de retry para resposta 4xx do cliente | TRANSCRICAO | [09:42] Diego |
-| RFC-OQ-05 | docs/RFC.md | Questão em aberto | Ordenação por `order_id` vs. retry atrasado | TRANSCRICAO | [09:12] Diego |
+| RFC-OQ-04 | docs/RFC.md | Questão em aberto | Retry definido para timeout/5xx/erro de rede; comportamento para 4xx ficou em aberto (lacuna) | TRANSCRICAO | [09:42] Diego |
+| RFC-OQ-05 | docs/RFC.md | Questão em aberto | Ordenação por `order_id` com single-worker; interação com retry atrasado ficou em aberto (lacuna) | TRANSCRICAO | [09:12] Diego |
 | RFC-OQ-06 | docs/RFC.md | Questão em aberto | Arquivamento de linhas entregues da outbox (~30 dias, adiado) | TRANSCRICAO | [09:08] Diego |
 | RFC-OQ-07 | docs/RFC.md | Questão em aberto | Escala para múltiplos workers (particionamento/lock) deixada para o futuro | TRANSCRICAO | [09:13] Diego |
 | RFC-RISK-01 | docs/RFC.md | Risco | Worker único é ponto único de processamento | TRANSCRICAO | [09:11] Diego |
 | RFC-RISK-02 | docs/RFC.md | Risco | Inserção na outbox acoplada ao `changeStatus` pode bloquear a operação | TRANSCRICAO | [09:41] Diego |
 | RFC-RISK-03 | docs/RFC.md | Risco | Cliente indisponível por mais de ~15h depende de replay manual | TRANSCRICAO | [09:17] Marcos |
+| RFC-RISK-04 | docs/RFC.md | Risco | Vazamento de secret de um endpoint | TRANSCRICAO | [09:22] Diego |
+| RFC-RISK-05 | docs/RFC.md | Risco | Duplicidade de entrega não tratada pelo cliente | TRANSCRICAO | [09:25] Diego |
 | RFC-REL-01 | docs/RFC.md | Decisão relacionada | Link para ADR-001 (outbox no MySQL) | TRANSCRICAO | [09:06] Diego |
 | RFC-REL-02 | docs/RFC.md | Decisão relacionada | Link para ADR-004 (HMAC-SHA256 secret por endpoint) | TRANSCRICAO | [09:20] Sofia |
 | FDD-CONTRATO-01 | docs/FDD.md | Contrato (endpoint) | `POST /api/v1/webhooks` cria webhook e devolve a secret | TRANSCRICAO | [09:31] Marcos |
@@ -128,7 +132,7 @@ Referência cruzada entre o pacote de design docs (`PRD`, `RFC`, `FDD`, `ADRs`) 
 | ADR-001 | docs/adrs/ADR-001-outbox-transacional-no-mysql.md | Decisão | Outbox transacional no MySQL, gravada na mesma transação da mudança de status | TRANSCRICAO | [09:06] Diego |
 | ADR-001-REF | docs/adrs/ADR-001-outbox-transacional-no-mysql.md | Referência de código | Transação de `changeStatus` e máquina de estados citadas no ADR | CODIGO | src/modules/orders/order.service.ts |
 | ADR-002 | docs/adrs/ADR-002-worker-em-processo-separado-com-polling.md | Decisão | Worker em processo separado com polling de 2 segundos, single-worker | TRANSCRICAO | [09:09] Diego |
-| ADR-003 | docs/adrs/ADR-003-retry-com-backoff-e-dlq.md | Decisão | Retry 1m/5m/30m/2h/12h (5 retentativas) e DLQ em tabela separada | TRANSCRICAO | [09:17] Diego |
+| ADR-003 | docs/adrs/ADR-003-retry-com-backoff-e-dlq.md | Decisão | Retry 1 tentativa inicial + 5 retentativas com backoff 1m/5m/30m/2h/12h e DLQ em tabela separada | TRANSCRICAO | [09:17] Diego |
 | ADR-004 | docs/adrs/ADR-004-hmac-sha256-com-secret-por-endpoint.md | Decisão | HMAC-SHA256 sobre o corpo, secret única por endpoint, rotação com 24h | TRANSCRICAO | [09:20] Sofia |
 | ADR-005 | docs/adrs/ADR-005-entrega-at-least-once-com-x-event-id.md | Decisão | Entrega at-least-once com `X-Event-Id` UUID para deduplicação no cliente | TRANSCRICAO | [09:25] Diego |
 | ADR-006 | docs/adrs/ADR-006-reuso-dos-padroes-existentes-do-projeto.md | Decisão | Reuso de `AppError`, Pino, error middleware, `requireRole` e padrão de módulos | TRANSCRICAO | [09:30] Larissa |
